@@ -1,6 +1,9 @@
 package waiter
 
-import "sync/atomic"
+import (
+	"errors"
+	"sync/atomic"
+)
 
 type Waiter interface {
 	Add(delta int)
@@ -21,14 +24,14 @@ func New() Waiter {
 }
 func (this *waiter) Add(delta int) {
 	if this.waits.Load() > 0 {
-		panic("cannot add while waiting")
+		panic(ErrAddDuringWait)
 	}
 	this.counter.Add(int64(delta))
 }
 func (this *waiter) Done() {
 	counter := this.counter.Add(-1)
 	if counter < 0 {
-		panic("negative counter")
+		panic(ErrNegativeCounter)
 	}
 }
 func (this *waiter) Wait() {
@@ -37,9 +40,14 @@ func (this *waiter) Wait() {
 	for {
 		value := this.counter.Load()
 		if value < 0 {
-			panic("negative counter")
+			panic(ErrNegativeCounter)
 		} else if value == 0 {
 			break
 		}
 	}
 }
+
+var (
+	ErrNegativeCounter = errors.New("negative counter")
+	ErrAddDuringWait   = errors.New("cannot add while waiting")
+)
