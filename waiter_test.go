@@ -5,27 +5,35 @@ import (
 	"testing"
 
 	"waiter"
+
+	. "github.com/mdwhatcott/funcy"
+	"github.com/mdwhatcott/go-set/v2/set"
+	"github.com/mdwhatcott/testing/should"
 )
 
-func wait(w waiter.Waiter) {
-	w.Add(10)
+func wait() chan int {
+	result := make(chan int, 100)
+	defer close(result)
+
+	sut := waiter.New()
+	sut.Add(10)
 	for x := 0; x < 10; x++ {
-		go w.Done()
+		go func(x int) { defer sut.Done(); result <- x }(x)
 	}
-	w.Wait()
+
+	var helper sync.WaitGroup
+	helper.Add(10)
+	for x := 0; x < 10; x++ {
+		go func(x int) { defer helper.Done(); sut.Wait(); result <- 10 + x }(x)
+	}
+	helper.Wait()
+
+	return result
 }
 func Test(t *testing.T) {
-	wait(waiter.New())
-}
-func BenchmarkToy(b *testing.B) {
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		wait(waiter.New())
-	}
-}
-func BenchmarkTool(b *testing.B) {
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		wait(new(sync.WaitGroup))
-	}
+	result := Drain(wait())
+	should.So(t, len(result), should.Equal, 20)
+	should.So(t, set.Of(Take(10, result)...), should.Equal, set.Of(Range(0, 10)...))
+	should.So(t, set.Of(Drop(10, result)...), should.Equal, set.Of(Range(10, 20)...))
+	should.So(t, SortAscending(ByNumericValue[int], result), should.Equal, Range(0, 20))
 }
